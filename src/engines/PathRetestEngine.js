@@ -1,10 +1,13 @@
 /**
- * PathRetestEngine — 4 transforms × 4 durations per master block.
+ * PathRetestEngine — 4 transforms × 4 durations per master block, interleaved.
  *
- * Each master block:
- *   - One master drawn without replacement (shuffle cycle across all masters)
- *   - One random base rotation, one random target selection
- *   - 4 symmetric transforms × 4 durations = 16 trials
+ * Maintains a pool of POOL_SIZE active master blocks simultaneously.
+ * Each trial, one block is picked at random from the pool and its next
+ * spec is returned. When a block exhausts all 16 trials it is replaced
+ * by a new master (drawn without replacement from the shuffle cycle).
+ *
+ * This means trials from different masters are interleaved throughout
+ * the session — you never see 16 consecutive trials from the same master.
  *
  * The four transforms form the Klein four-group (Z₂×Z₂):
  *   T0: identity              (rotOffset=0,   mirror=false)
@@ -12,20 +15,12 @@
  *   T2: mirror                (rotOffset=0,   mirror=true)
  *   T3: rotate 180° + mirror  (rotOffset=π,   mirror=true)
  *
- * 180° rotation and mirror through a central axis both have order 2
- * and commute (180° rotation is a point reflection through the centre,
- * which commutes with any line reflection through the same centre).
- * This guarantees the group is abelian: Z₂×Z₂.
+ * Transform order randomised per block.
+ * Duration order randomised independently per transform.
+ * Masters drawn without replacement across blocks.
  *
- * All four transforms preserve inter-ball distances and the Bouma
- * crowding ellipse (radially symmetric around fixation at arena centre).
- *
- * Transform order is randomised per block.
- * Duration order is randomised independently per transform.
- * Masters are drawn without replacement across blocks.
- *
- * CSV fields logged: pr_transform_idx (0–3), pr_base_rotation (degrees)
- * Analysis: group by (master_id, pr_base_rotation) → 4×4 matrix
+ * CSV fields: pr_transform_idx (0–3), pr_base_rotation (always 0)
+ * Analysis: group by (master_id, target_ids) → 4×4 matrix
  */
 
 const B          = 20;
@@ -38,6 +33,7 @@ const TRANSFORMS = [
   { rotOffset: 0,       isMirrored: true  },  // T2: mirror
   { rotOffset: Math.PI, isMirrored: true  },  // T3: rotate 180° + mirror
 ];
+const POOL_SIZE = 3;  // active master blocks interleaved simultaneously
 
 function shuffle(arr) {
   const a = [...arr];
@@ -48,70 +44,77 @@ function shuffle(arr) {
   return a;
 }
 
+function buildBlock(masterID) {
+  const isReversed = Math.random() < 0.5;
+  const targetIDs  = shuffle(Array.from({ length: B }, (_, i) => i)).slice(0, T);
+  const specs = [];
+  for (const ti of shuffle([0, 1, 2, 3])) {
+    const { rotOffset, isMirrored } = TRANSFORMS[ti];
+    for (const moveDur of shuffle([...DURATIONS])) {
+      specs.push({
+        masterID,
+        rotation:       rotOffset,   // base=0, transforms always clean 0° or 180°
+        isMirrored,
+        isReversed,
+        numTargets:     T,
+        numBalls:       B,
+        targetIDs:      [...targetIDs],
+        speed:          S,
+        moveDur,
+        staircaseType:  'path_retest',
+        targetLoad:     B,
+        staircaseLoad:  B,
+        prTransformIdx: ti,
+        prBaseRotation: 0,
+      });
+    }
+  }
+  return specs;  // 16 specs
+}
+
 export class PathRetestEngine {
   constructor() {
-    this._masterQueue = [];  // shuffle-cycle, no replacement within cycle
-    this._trialQueue  = [];  // 16-trial block queue
+    this._masterQueue = [];
+    this._pool        = [];
   }
 
   reset() {
     this._masterQueue = [];
-    this._trialQueue  = [];
+    this._pool        = [];
+  }
+
+  _nextMasterID(numMasters) {
+    if (this._masterQueue.length === 0)
+      this._masterQueue = shuffle(Array.from({ length: numMasters }, (_, i) => i));
+    return this._masterQueue.shift();
   }
 
   nextSpec(numMasters) {
-    if (this._trialQueue.length > 0) return this._trialQueue.shift();
+    // Fill pool to POOL_SIZE on first call or after reset
+    while (this._pool.length < POOL_SIZE)
+      this._pool.push(buildBlock(this._nextMasterID(numMasters)));
 
-    // Refill master queue when exhausted (all masters seen before any repeat)
-    if (this._masterQueue.length === 0)
-      this._masterQueue = shuffle(Array.from({ length: numMasters }, (_, i) => i));
+    // Pick a random active block, take its next spec
+    const idx  = Math.floor(Math.random() * this._pool.length);
+    const spec = this._pool[idx].shift();
 
-    const masterID   = this._masterQueue.shift();
-    const baseRot    = Math.random() * Math.PI * 2;
-    const isReversed = Math.random() < 0.5;
-    const targetIDs  = shuffle(Array.from({ length: B }, (_, i) => i)).slice(0, T);
+    // Replace exhausted block with a fresh one
+    if (this._pool[idx].length === 0)
+      this._pool[idx] = buildBlock(this._nextMasterID(numMasters));
 
-    // Build 16 specs: randomise transform order, randomise duration order per transform
-    const specs = [];
-    for (const ti of shuffle([0, 1, 2, 3])) {
-      const { rotOffset, isMirrored } = TRANSFORMS[ti];
-      for (const moveDur of shuffle([...DURATIONS])) {
-        specs.push({
-          masterID,
-          rotation:       baseRot + rotOffset,
-          isMirrored,
-          isReversed,
-          numTargets:     T,
-          numBalls:       B,
-          targetIDs:      [...targetIDs],
-          speed:          S,
-          moveDur,
-          staircaseType:  'path_retest',
-          targetLoad:     B,
-          staircaseLoad:  B,
-          // path_retest specific — logged to CSV
-          prTransformIdx: ti,
-          prBaseRotation: +(baseRot * 180 / Math.PI).toFixed(1),
-        });
-      }
-    }
-
-    this._trialQueue = specs;
-    return this._trialQueue.shift();
+    return spec;
   }
 
-  update(_correct) {}  // non-adaptive
+  update(_correct) {}
 
-  get label() { return 'Path Retest — 4 transforms × 4 durations'; }
+  get label() { return 'Path Retest — 4 transforms × 4 durations (interleaved)'; }
 
   get description() {
     return `Path retest — B=${B}, T=${T}, S=${S} fixed. `
-         + `Each master block: same targets, 4 transforms × 4 durations = 16 trials. `
-         + `Transforms: 0°, 180°, mirror, 180°+mirror (Klein four-group — preserves crowding geometry). `
-         + `Durations: ${DURATIONS.join('s, ')}s. `
-         + `Masters drawn without replacement. `
-         + `Identifies when slot corruption occurs within a fixed path.`;
+         + `${POOL_SIZE} master blocks active simultaneously, trials interleaved. `
+         + `Each block: 4 transforms × 4 durations = 16 trials. `
+         + `Rotations always 0° or 180°. Masters drawn without replacement.`;
   }
 
-  get config() { return { B, T, S, DURATIONS, TRANSFORMS }; }
+  get config() { return { B, T, S, DURATIONS, TRANSFORMS, POOL_SIZE }; }
 }
