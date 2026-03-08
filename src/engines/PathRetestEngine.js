@@ -45,17 +45,16 @@ function shuffle(arr) {
 }
 
 function buildBlock(masterID) {
-  const isReversed = Math.random() < 0.5;
-  const targetIDs  = shuffle(Array.from({ length: B }, (_, i) => i)).slice(0, T);
+  const targetIDs = shuffle(Array.from({ length: B }, (_, i) => i)).slice(0, T);
   const specs = [];
   for (const ti of shuffle([0, 1, 2, 3])) {
     const { rotOffset, isMirrored } = TRANSFORMS[ti];
     for (const moveDur of shuffle([...DURATIONS])) {
       specs.push({
         masterID,
-        rotation:       rotOffset,   // base=0, transforms always clean 0° or 180°
+        rotation:       rotOffset,
         isMirrored,
-        isReversed,
+        isReversed:     Math.random() < 0.5,  // randomised per spec, not per block
         numTargets:     T,
         numBalls:       B,
         targetIDs:      [...targetIDs],
@@ -69,7 +68,7 @@ function buildBlock(masterID) {
       });
     }
   }
-  return specs;  // 16 specs
+  return specs;
 }
 
 export class PathRetestEngine {
