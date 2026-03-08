@@ -54,7 +54,8 @@ function buildBlock(masterID) {
         masterID,
         rotation:       rotOffset,
         isMirrored,
-        isReversed:     Math.random() < 0.5,  // randomised per spec, not per block
+        //isReversed:     Math.random() < 0.5,  // randomised per spec, not per block
+        isReversed: false,   // always forward — is_reversed was breaking block completeness
         numTargets:     T,
         numBalls:       B,
         targetIDs:      [...targetIDs],
