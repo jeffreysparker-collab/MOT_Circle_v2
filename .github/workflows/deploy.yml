@@ -1,6 +1,5 @@
 name: Deploy MOT PWA to GitHub Pages
 
-
 on:
   push:
     branches: [main]
