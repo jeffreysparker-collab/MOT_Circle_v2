@@ -1,8 +1,8 @@
 {
   "name": "MOT Research",
   "short_name": "MOT",
-  "start_url": "/MOT_Circle/",
-  "scope": "/MOT_Circle/",
+  "start_url": "/MOT_Circle_v2/",
+  "scope": "/MOT_Circle_v2/",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#0d0d14",
