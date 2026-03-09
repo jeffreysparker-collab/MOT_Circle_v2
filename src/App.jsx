@@ -315,6 +315,11 @@ export default function App() {
     setTrialCount(0);
     setPhase('experiment');
     await startNewTrial();
+    // temporary debug
+setTimeout(() => {
+  const rect = canvasRef.current.getBoundingClientRect();
+  console.log('canvas px:', rect.width, '| window px:', window.innerWidth);
+}, 100);
   }, [settings, startNewTrial]);
 
   // ── Canvas interaction ───────────────────────────────────────────────────────
