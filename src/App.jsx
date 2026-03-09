@@ -59,6 +59,7 @@ export default function App() {
   const [expPhase,       setExpPhase]       = useState('idle');
   const [logs,           setLogs]           = useState([]);
   const [summaries,      setSummaries]      = useState([]);
+  const [selectionCount, setSelectionCount] = useState(0);
   const [canvasInfo, setCanvasInfo] = useState('');
   const [settings, setSettings] = useState({
     mode:                'off',
@@ -85,6 +86,7 @@ export default function App() {
   const activeIdxRef  = useRef(0);
   const retestBankRef = useRef([]);
 
+  useEffect(() => { modeRef.current = settings.mode; }, [settings.mode]);
   useEffect(() => {
     const id = setInterval(() => {
       if (!canvasRef.current) return;
@@ -93,8 +95,6 @@ export default function App() {
     }, 1000);
     return () => clearInterval(id);
   }, []);
-
-  useEffect(() => { modeRef.current = settings.mode; }, [settings.mode]);
   useEffect(() => {
     countMasterScripts().then(n => setScriptCount(n));
     getAllTrialLogs().then(rows => setLogs(rows));
@@ -198,6 +198,13 @@ export default function App() {
   const startRenderLoop = useCallback(() => {
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
     const myGen = ++loopGenRef.current;
+
+    const waitForCanvas = (resolve) => {
+      if (canvasRef.current) { resolve(); return; }
+      requestAnimationFrame(() => waitForCanvas(resolve));
+    };
+
+    new Promise(waitForCanvas).then(() => {
     const tick = now => {
       if (loopGenRef.current !== myGen) return;
       const canvas = canvasRef.current;
@@ -237,6 +244,7 @@ export default function App() {
         rafRef.current = requestAnimationFrame(tick);
     };
     rafRef.current = requestAnimationFrame(tick);
+    }); // end waitForCanvas
   }, [drawFrame]);
 
   // ── New trial ────────────────────────────────────────────────────────────────
