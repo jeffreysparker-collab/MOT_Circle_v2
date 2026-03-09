@@ -199,17 +199,19 @@ export default function App() {
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
     const myGen = ++loopGenRef.current;
 
-    const waitForCanvas = (resolve) => {
-      if (canvasRef.current) { resolve(); return; }
-      requestAnimationFrame(() => waitForCanvas(resolve));
-    };
-
-    new Promise(waitForCanvas).then(() => {
     const tick = now => {
       if (loopGenRef.current !== myGen) return;
       const canvas = canvasRef.current;
       const trial  = trialRef.current;
-      if (!canvas || !trial) return;
+      if (!canvas || !trial) {
+        // canvas not mounted yet — keep waiting
+        rafRef.current = requestAnimationFrame(tick);
+        return;
+      }
+      // First frame after canvas is ready — reset phase timer so elapsed starts from 0
+      if (phaseStartRef.current === -1) {
+        phaseStartRef.current = now;
+      }
       const elapsed  = (now - phaseStartRef.current) / 1000;
       const curPhase = expPhaseRef.current;
 
@@ -244,7 +246,6 @@ export default function App() {
         rafRef.current = requestAnimationFrame(tick);
     };
     rafRef.current = requestAnimationFrame(tick);
-    }); // end waitForCanvas
   }, [drawFrame]);
 
   // ── New trial ────────────────────────────────────────────────────────────────
@@ -307,7 +308,7 @@ export default function App() {
     setTrialResult(null);
     expPhaseRef.current = 'cue';
     setExpPhase('cue');
-    phaseStartRef.current = performance.now();
+    phaseStartRef.current = -1; // will be set on first rendered frame
     startRenderLoop();
   }, [startRenderLoop]);
 
