@@ -59,7 +59,7 @@ export default function App() {
   const [expPhase,       setExpPhase]       = useState('idle');
   const [logs,           setLogs]           = useState([]);
   const [summaries,      setSummaries]      = useState([]);
-  const [selectionCount, setSelectionCount] = useState(0);
+  const [canvasInfo, setCanvasInfo] = useState('');
   const [settings, setSettings] = useState({
     mode:                'off',
     staircaseRule:       '1up2down',
@@ -85,18 +85,20 @@ export default function App() {
   const activeIdxRef  = useRef(0);
   const retestBankRef = useRef([]);
 
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (!canvasRef.current) return;
+      const r = canvasRef.current.getBoundingClientRect();
+      setCanvasInfo(`canvas:${Math.round(r.width)}x${Math.round(r.height)} win:${window.innerWidth}x${window.innerHeight}`);
+    }, 1000);
+    return () => clearInterval(id);
+  }, []);
+
   useEffect(() => { modeRef.current = settings.mode; }, [settings.mode]);
   useEffect(() => {
     countMasterScripts().then(n => setScriptCount(n));
     getAllTrialLogs().then(rows => setLogs(rows));
   }, []);
-
-  // Trigger first trial once canvas is mounted after phase switches to 'experiment'
-  useEffect(() => {
-    if (phase === 'experiment') {
-      startNewTrial();
-    }
-  }, [phase]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Generate ─────────────────────────────────────────────────────────────────
   const handleGenerate = useCallback(async () => {
@@ -200,7 +202,7 @@ export default function App() {
       if (loopGenRef.current !== myGen) return;
       const canvas = canvasRef.current;
       const trial  = trialRef.current;
-      if (!canvas || !trial) { rafRef.current = requestAnimationFrame(tick); return; }
+      if (!canvas || !trial) return;
       const elapsed  = (now - phaseStartRef.current) / 1000;
       const curPhase = expPhaseRef.current;
 
@@ -302,7 +304,7 @@ export default function App() {
   }, [startRenderLoop]);
 
   // ── Start experiment ─────────────────────────────────────────────────────────
-  const handleStartExperiment = useCallback(() => {
+  const handleStartExperiment = useCallback(async () => {
     modeRef.current = settings.mode;
     retestBankRef.current = [];
     trialIdRef.current = 0;
@@ -321,8 +323,8 @@ export default function App() {
     setSummaries([]);
     setTrialCount(0);
     setPhase('experiment');
-    // startNewTrial is triggered by useEffect once canvas is mounted
-  }, [settings]);
+    await startNewTrial();
+  }, [settings, startNewTrial]);
 
   // ── Canvas interaction ───────────────────────────────────────────────────────
   const handleCanvasInteraction = useCallback((clientX, clientY) => {
@@ -555,6 +557,11 @@ export default function App() {
             numTargets={trialRef.current?.numTargets}
             selectionCount={selectionCount}
           />
+        </div>
+      )}
+      {canvasInfo && (
+        <div style={{ position: 'fixed', bottom: 0, left: 0, background: 'rgba(0,0,0,0.85)', color: '#0f0', fontSize: 13, padding: '4px 8px', zIndex: 9999, fontFamily: 'monospace' }}>
+          {canvasInfo}
         </div>
       )}
     </div>
