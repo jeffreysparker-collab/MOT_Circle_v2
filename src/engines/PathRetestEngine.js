@@ -1,10 +1,10 @@
 /**
  *
- * PathRetestEngine — 4 transforms × 4 durations per master block, interleaved.
+ * PathRetestEngine — 4 transforms × 6 durations per master block, interleaved.
  *
  * Maintains a pool of POOL_SIZE active master blocks simultaneously.
  * Each trial, one block is picked at random from the pool and its next
- * spec is returned. When a block exhausts all 16 trials it is replaced
+ * spec is returned. When a block exhausts all 24 trials it is replaced
  * by a new master (drawn without replacement from the shuffle cycle).
  *
  * This means trials from different masters are interleaved throughout
@@ -27,7 +27,7 @@
 const B          = 20;
 const T          = 4;
 const S          = 1.0;
-const DURATIONS  = [3.0, 2.0, 1.0, 0.5];
+const DURATIONS  = [5.0, 4.0, 3.0, 2.0, 1.0, 0.5];
 const TRANSFORMS = [
   { rotOffset: 0,       isMirrored: false },  // T0: identity
   { rotOffset: Math.PI, isMirrored: false },  // T1: rotate 180°
@@ -108,12 +108,12 @@ export class PathRetestEngine {
 
   update(_correct) {}
 
-  get label() { return 'Path Retest — 4 transforms × 4 durations (interleaved)'; }
+  get label() { return 'Path Retest — 4 transforms × 6 durations (interleaved)'; }
 
   get description() {
     return `Path retest — B=${B}, T=${T}, S=${S} fixed. `
          + `${POOL_SIZE} master blocks active simultaneously, trials interleaved. `
-         + `Each block: 4 transforms × 4 durations = 16 trials. `
+         + `Each block: 4 transforms × 6 durations = 24 trials. `
          + `Rotations always 0° or 180°. Masters drawn without replacement.`;
   }
 
