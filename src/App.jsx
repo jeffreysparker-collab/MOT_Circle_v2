@@ -316,10 +316,15 @@ export default function App() {
     setPhase('experiment');
     await startNewTrial();
     // temporary debug
-setTimeout(() => {
-  const rect = canvasRef.current.getBoundingClientRect();
-  console.log('canvas px:', rect.width, '| window px:', window.innerWidth);
-}, 100);
+    setTimeout(() => {
+      if (!canvasRef.current) return;
+      const rect = canvasRef.current.getBoundingClientRect();
+      const info = document.createElement('div');
+      info.style.cssText = 'position:fixed;top:0;left:0;background:rgba(0,0,0,0.8);color:white;padding:10px;font-size:16px;z-index:9999';
+      info.textContent = `canvas: ${rect.width}x${rect.height} | window: ${window.innerWidth}x${window.innerHeight}`;
+      document.body.appendChild(info);
+      setTimeout(() => info.remove(), 5000);
+    }, 500);
   }, [settings, startNewTrial]);
 
   // ── Canvas interaction ───────────────────────────────────────────────────────
