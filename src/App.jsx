@@ -91,6 +91,13 @@ export default function App() {
     getAllTrialLogs().then(rows => setLogs(rows));
   }, []);
 
+  // Trigger first trial once canvas is mounted after phase switches to 'experiment'
+  useEffect(() => {
+    if (phase === 'experiment') {
+      startNewTrial();
+    }
+  }, [phase]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Generate ─────────────────────────────────────────────────────────────────
   const handleGenerate = useCallback(async () => {
     setPhase('generating');
@@ -193,7 +200,7 @@ export default function App() {
       if (loopGenRef.current !== myGen) return;
       const canvas = canvasRef.current;
       const trial  = trialRef.current;
-      if (!canvas || !trial) return;
+      if (!canvas || !trial) { rafRef.current = requestAnimationFrame(tick); return; }
       const elapsed  = (now - phaseStartRef.current) / 1000;
       const curPhase = expPhaseRef.current;
 
@@ -295,7 +302,7 @@ export default function App() {
   }, [startRenderLoop]);
 
   // ── Start experiment ─────────────────────────────────────────────────────────
-  const handleStartExperiment = useCallback(async () => {
+  const handleStartExperiment = useCallback(() => {
     modeRef.current = settings.mode;
     retestBankRef.current = [];
     trialIdRef.current = 0;
@@ -314,18 +321,8 @@ export default function App() {
     setSummaries([]);
     setTrialCount(0);
     setPhase('experiment');
-    await startNewTrial();
-    // temporary debug
-    setTimeout(() => {
-      if (!canvasRef.current) return;
-      const rect = canvasRef.current.getBoundingClientRect();
-      const info = document.createElement('div');
-      info.style.cssText = 'position:fixed;top:0;left:0;background:rgba(0,0,0,0.8);color:white;padding:10px;font-size:16px;z-index:9999';
-      info.textContent = `canvas: ${rect.width}x${rect.height} | window: ${window.innerWidth}x${window.innerHeight}`;
-      document.body.appendChild(info);
-      setTimeout(() => info.remove(), 5000);
-    }, 500);
-  }, [settings, startNewTrial]);
+    // startNewTrial is triggered by useEffect once canvas is mounted
+  }, [settings]);
 
   // ── Canvas interaction ───────────────────────────────────────────────────────
   const handleCanvasInteraction = useCallback((clientX, clientY) => {
