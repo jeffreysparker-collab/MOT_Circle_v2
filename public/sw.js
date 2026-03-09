@@ -2,7 +2,6 @@
 // IMPORTANT: BASE must match vite.config.js base exactly
 const BASE       = '/MOT_Circle_v2/';
 const CACHE_NAME = 'mot-pwa-v3';
-
 const PRECACHE = [
   BASE,
   BASE + 'index.html',
