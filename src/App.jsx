@@ -57,6 +57,8 @@ export default function App() {
   const [trialCount,     setTrialCount]     = useState(0);
   const [trialResult,    setTrialResult]    = useState(null);
   const [expPhase,       setExpPhase]       = useState('idle');
+  const [likertState,    setLikertState]    = useState(null); // {targets, ratings, currentIdx}
+  const likertRatingsRef = useRef([]);       // accumulates ratings during probe
   const [logs,           setLogs]           = useState([]);
   const [summaries,      setSummaries]      = useState([]);
   const [selectionCount, setSelectionCount] = useState(0);
@@ -366,21 +368,9 @@ export default function App() {
     handleCanvasInteraction(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
   }, [handleCanvasInteraction]);
 
-  // ── Submit ───────────────────────────────────────────────────────────────────
-  const handleSubmitResponse = useCallback(async () => {
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    const trial    = trialRef.current;
-    const selected = [...selectedRef.current];
-    const targets  = trial.targetIDs;
-    const hits     = selected.filter(id => targets.includes(id)).length;
-    const rawScore = hits / targets.length;
-    const correct  = rawScore === 1.0;
-
-    if (modeRef.current === 'off')
-      staircasesRef.current[activeIdxRef.current].update(correct);
-    else
-      engineRef.current.update(correct);
-
+  // ── Save trial log (shared by submit and likert completion) ─────────────────
+  const saveAndAdvance = useCallback(async (trial, selected, hits, rawScore, correct, likertRatings = null) => {
+    const targets = trial.targetIDs;
     const logRow = {
       trial_id:              trial.trialId,
       timestamp:             new Date().toISOString(),
@@ -408,6 +398,8 @@ export default function App() {
                                ? +(trial._retestRotDelta * 180 / Math.PI).toFixed(1) : '',
       pr_transform_idx:      trial.prTransformIdx  ?? '',
       pr_base_rotation:      trial.prBaseRotation  ?? '',
+      likert_trial:          trial.isLikertTrial ? 1 : 0,
+      likert_ratings:        likertRatings ? likertRatings.join(';') : '',
     };
     await saveTrialLog(logRow);
 
@@ -434,6 +426,65 @@ export default function App() {
     setExpPhase('feedback');
     setTimeout(() => startNewTrial(), FEEDBACK_MS);
   }, [startNewTrial]);
+
+  // ── Likert rating handler ────────────────────────────────────────────────────
+  const handleLikertRating = useCallback(async (rating) => {
+    const trial    = trialRef.current;
+    const ls       = likertState;
+    if (!ls) return;
+
+    const newRatings = [...ls.ratings];
+    newRatings[ls.currentIdx] = rating;
+    const nextIdx = ls.currentIdx + 1;
+
+    if (nextIdx >= ls.targets.length) {
+      // All targets rated — save and advance
+      setLikertState(null);
+      await saveAndAdvance(
+        trial, ls.selected, ls.hits, ls.rawScore, ls.correct,
+        ls.targets.map((_, i) => newRatings[i])
+      );
+    } else {
+      // Advance to next target
+      setLikertState({ ...ls, ratings: newRatings, currentIdx: nextIdx });
+    }
+  }, [likertState, saveAndAdvance]);
+
+  // ── Submit ───────────────────────────────────────────────────────────────────
+  const handleSubmitResponse = useCallback(async () => {
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    const trial    = trialRef.current;
+    const selected = [...selectedRef.current];
+    const targets  = trial.targetIDs;
+    const hits     = selected.filter(id => targets.includes(id)).length;
+    const rawScore = hits / targets.length;
+    const correct  = rawScore === 1.0;
+
+    if (modeRef.current === 'off')
+      staircasesRef.current[activeIdxRef.current].update(correct);
+    else
+      engineRef.current.update(correct);
+
+    // Shuffle target order for Likert to avoid order bias
+    const shuffledTargets = shuffle([...targets]);
+
+    if (trial.isLikertTrial) {
+      // Enter Likert phase — show per-target confidence probe
+      expPhaseRef.current = 'likert';
+      setExpPhase('likert');
+      setLikertState({
+        targets:    shuffledTargets,
+        ratings:    new Array(shuffledTargets.length).fill(null),
+        currentIdx: 0,
+        selected,
+        hits,
+        rawScore,
+        correct,
+      });
+    } else {
+      await saveAndAdvance(trial, selected, hits, rawScore, correct, null);
+    }
+  }, [saveAndAdvance]);
 
   // ── Export ───────────────────────────────────────────────────────────────────
   const handleExport = useCallback(async () => {
@@ -478,7 +529,7 @@ export default function App() {
                 <option value="off">Adaptive Staircase (threshold)</option>
                 <option value="b_latin">Engagement Mapping — B latin square</option>
                 <option value="bd_factorial">Engagement Mapping — B×D factorial</option>
-                <option value="path_retest">Path Retest — 4 transforms × 4 durations</option>
+                <option value="path_retest">Path Retest — 4 transforms × 5 durations</option>
               </select>
             </label>
             <ModeDescription mode={settings.mode} />
@@ -540,6 +591,13 @@ export default function App() {
             />
             <div style={{ minHeight: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: 8 }}>
               {expPhase === 'feedback' && trialResult && <FeedbackBadge result={trialResult} />}
+              {expPhase === 'likert'   && likertState  && (
+                <LikertBadge
+                  ballId={likertState.targets[likertState.currentIdx]}
+                  currentIdx={likertState.currentIdx}
+                  total={likertState.targets.length}
+                />
+              )}
             </div>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 4 }}>
               {expPhase === 'respond' && (
@@ -550,6 +608,9 @@ export default function App() {
                 >
                   Submit ({selectionCount} / {trialRef.current?.numTargets})
                 </Btn>
+              )}
+              {expPhase === 'likert' && likertState && (
+                <LikertButtons onRate={handleLikertRating} />
               )}
               <Btn onClick={async () => {
                 if (rafRef.current) cancelAnimationFrame(rafRef.current);
@@ -618,6 +679,7 @@ function Sidebar({ trialCount, summaries, expPhase, numTargets, selectionCount }
         {expPhase === 'cue'     && <Hint>Memorise the glowing balls!</Hint>}
         {expPhase === 'move'    && <Hint>Track the targets…</Hint>}
         {expPhase === 'respond' && <Hint>Select {numTargets} balls — {selectionCount} chosen</Hint>}
+        {expPhase === 'likert'  && <Hint>Rate your confidence for each target</Hint>}
       </div>
     </div>
   );
@@ -685,6 +747,43 @@ function ProgressBar({ value }) {
   return (
     <div style={{ background: '#222', borderRadius: 6, height: 12, overflow: 'hidden' }}>
       <div style={{ background: '#4a9eff', width: `${value}%`, height: '100%', transition: 'width 0.3s' }} />
+    </div>
+  );
+}
+
+function LikertBadge({ ballId, currentIdx, total }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <span style={{ color: '#ffcc00', fontSize: 15, fontWeight: 'bold' }}>
+        Ball {ballId}
+      </span>
+      <span style={{ color: '#666688', fontSize: 12 }}>
+        {currentIdx + 1} / {total} — how confident?
+      </span>
+    </div>
+  );
+}
+
+const LIKERT_LABELS = [
+  { value: 1, label: 'Lost',        color: '#ff4444' },
+  { value: 2, label: 'Unsure',      color: '#ff9944' },
+  { value: 3, label: 'Fairly sure', color: '#44aaff' },
+  { value: 4, label: 'Certain',     color: '#44ff88' },
+];
+
+function LikertButtons({ onRate }) {
+  return (
+    <div style={{ display: 'flex', gap: 8 }}>
+      {LIKERT_LABELS.map(({ value, label, color }) => (
+        <button key={value} onClick={() => onRate(value)} style={{
+          padding: '10px 14px', borderRadius: 8, border: `2px solid ${color}`,
+          background: 'transparent', color, fontFamily: 'monospace',
+          fontSize: 13, cursor: 'pointer', fontWeight: 'bold',
+          minWidth: 72, touchAction: 'manipulation',
+        }}>
+          {label}
+        </button>
+      ))}
     </div>
   );
 }
