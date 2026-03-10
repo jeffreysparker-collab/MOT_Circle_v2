@@ -123,7 +123,7 @@ export default function App() {
   }, []);
 
   // ── Draw ─────────────────────────────────────────────────────────────────────
-  const drawFrame = useCallback((ctx, trial, ff, curPhase, elapsed, selected, glowFade = 1) => {
+  const drawFrame = useCallback((ctx, trial, ff, curPhase, elapsed, selected, glowFade = 1, likertBallId = null) => {
     ctx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
     ctx.fillStyle = CLR.bg;
     ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
@@ -184,6 +184,28 @@ export default function App() {
       ctx.shadowBlur = (8 + pulse * 14) * glowFade;
       ctx.fill();
       ctx.shadowBlur = 0;
+    }
+
+    // Pass 3 — likert halo on current ball being rated
+    if (likertBallId !== null) {
+      const { cx, cy } = pos[likertBallId];
+      // Outer pulsing halo ring
+      ctx.beginPath();
+      ctx.arc(cx, cy, BALL_R + 8, 0, Math.PI * 2);
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 3;
+      ctx.shadowColor = '#ffffff';
+      ctx.shadowBlur = 18;
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+      ctx.lineWidth = 1;
+      // Second ring for extra visibility
+      ctx.beginPath();
+      ctx.arc(cx, cy, BALL_R + 14, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.lineWidth = 1;
     }
 
     ctx.restore();
@@ -427,7 +449,16 @@ export default function App() {
     setTimeout(() => startNewTrial(), FEEDBACK_MS);
   }, [startNewTrial]);
 
-  // ── Likert rating handler ────────────────────────────────────────────────────
+  // Redraw with likert halo whenever current target advances
+  useEffect(() => {
+    if (!likertState || !canvasRef.current || !trialRef.current) return;
+    const canvas  = canvasRef.current;
+    const trial   = trialRef.current;
+    const ff      = trial.lastFrame ?? 0;
+    const ballId  = likertState.targets[likertState.currentIdx];
+    drawFrame(canvas.getContext('2d'), trial, ff, 'likert', 0,
+              new Set(likertState.selected), 0, ballId);
+  }, [likertState, drawFrame]);
   const handleLikertRating = useCallback(async (rating) => {
     const trial    = trialRef.current;
     const ls       = likertState;
