@@ -496,8 +496,8 @@ export default function App() {
     else
       engineRef.current.update(correct);
 
-    // Shuffle target order for Likert to avoid order bias
-    const shuffledTargets = shuffle([...targets]);
+    // Shuffle selected ball order for Likert to avoid order bias
+    const shuffledTargets = shuffle([...selected]);
 
     if (trial.isLikertTrial) {
       // Enter Likert phase — show per-target confidence probe
