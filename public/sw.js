@@ -29,12 +29,17 @@ self.addEventListener('fetch', e => {
   // Only handle requests within our scope
   if (!url.pathname.startsWith(BASE)) return;
 
-  // Navigation requests (page loads): serve index.html from cache or network
+  // Navigation requests: network-first so updated HTML always loads immediately
+  // Falls back to cache only if offline
   if (e.request.mode === 'navigate') {
     e.respondWith(
-      caches.match(BASE + 'index.html').then(cached => {
-        return cached || fetch(BASE + 'index.html');
-      })
+      fetch(BASE + 'index.html')
+        .then(res => {
+          // Update cache with fresh response
+          caches.open(CACHE_NAME).then(c => c.put(BASE + 'index.html', res.clone()));
+          return res;
+        })
+        .catch(() => caches.match(BASE + 'index.html'))
     );
     return;
   }
