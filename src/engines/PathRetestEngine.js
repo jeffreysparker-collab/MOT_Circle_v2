@@ -1,6 +1,15 @@
 /**
  *
- * PathRetestEngine — 4 transforms × 6 durations per master block, interleaved.
+ * PathRetestEngine — 4 transforms × 5 durations per master block, interleaved.
+ *
+ * Durations [1,2,4,6,8]s chosen to maximise model discrimination between
+ * exponential, power-law, and linear decay. The 8s anchor is critical —
+ * it separates power-law (never floors) from linear (floors ~7s).
+ * Each master block = 4 transforms × 5 durations = 20 trials.
+ * 10 masters × 20 trials = 200 trials per complete session.
+ *
+ * Likert confidence probe inserted every LIKERT_EVERY trials (configurable).
+ * Logged as likert_trial flag + likert_ratings per-target in CSV.
  *
  * Maintains a pool of POOL_SIZE active master blocks simultaneously.
  * Each trial, one block is picked at random from the pool and its next
@@ -27,14 +36,15 @@
 const B          = 20;
 const T          = 4;
 const S          = 1.0;
-const DURATIONS  = [5.0, 4.0, 3.0, 2.0, 1.0, 0.5];
+const DURATIONS  = [8.0, 6.0, 4.0, 2.0, 1.0];  // 5 durations optimised for model discrimination
 const TRANSFORMS = [
   { rotOffset: 0,       isMirrored: false },  // T0: identity
   { rotOffset: Math.PI, isMirrored: false },  // T1: rotate 180°
   { rotOffset: 0,       isMirrored: true  },  // T2: mirror
   { rotOffset: Math.PI, isMirrored: true  },  // T3: rotate 180° + mirror
 ];
-const POOL_SIZE = 3;  // active master blocks interleaved simultaneously
+const POOL_SIZE    = 3;   // active master blocks interleaved simultaneously
+const LIKERT_EVERY = 4;   // insert Likert confidence probe every N trials
 
 function shuffle(arr) {
   const a = [...arr];
@@ -77,11 +87,13 @@ export class PathRetestEngine {
   constructor() {
     this._masterQueue = [];
     this._pool        = [];
+    this._trialCount  = 0;  // total trials dispensed, used for Likert scheduling
   }
 
   reset() {
     this._masterQueue = [];
     this._pool        = [];
+    this._trialCount  = 0;
   }
 
   _nextMasterID(numMasters) {
@@ -103,19 +115,27 @@ export class PathRetestEngine {
     if (this._pool[idx].length === 0)
       this._pool[idx] = buildBlock(this._nextMasterID(numMasters));
 
+    // Tag every LIKERT_EVERY-th trial as a Likert probe trial
+    // App.js should show per-target confidence UI after response on these trials
+    this._trialCount++;
+    spec.isLikertTrial = (this._trialCount % LIKERT_EVERY === 0);
+    spec.trialIndex    = this._trialCount;
+
     return spec;
   }
 
   update(_correct) {}
 
-  get label() { return 'Path Retest — 4 transforms × 6 durations (interleaved)'; }
+  get label() { return 'Path Retest — 4 transforms × 5 durations (interleaved)'; }
 
   get description() {
     return `Path retest — B=${B}, T=${T}, S=${S} fixed. `
          + `${POOL_SIZE} master blocks active simultaneously, trials interleaved. `
-         + `Each block: 4 transforms × 6 durations = 24 trials. `
+         + `Each block: 4 transforms × 5 durations = 20 trials. `
+         + `Durations [1,2,4,6,8]s optimised for model discrimination. `
+         + `Likert confidence probe every ${LIKERT_EVERY} trials. `
          + `Rotations always 0° or 180°. Masters drawn without replacement.`;
   }
 
-  get config() { return { B, T, S, DURATIONS, TRANSFORMS, POOL_SIZE }; }
+  get config() { return { B, T, S, DURATIONS, TRANSFORMS, POOL_SIZE, LIKERT_EVERY }; }
 }
