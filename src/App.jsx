@@ -154,7 +154,7 @@ export default function App() {
       ctx.beginPath();
       ctx.arc(cx, cy, BALL_R, 0, Math.PI * 2);
       ctx.shadowBlur = 0;
-      if (curPhase === 'respond' && selected.has(b)) {
+      if ((curPhase === 'respond' || curPhase === 'likert') && selected.has(b)) {
         ctx.fillStyle = CLR.selected;
         ctx.shadowColor = CLR.selected;
         ctx.shadowBlur = 12;
@@ -163,7 +163,7 @@ export default function App() {
       }
       ctx.fill();
       ctx.shadowBlur = 0;
-      if (curPhase === 'respond') {
+      if (curPhase === 'respond' || curPhase === 'likert') {
         ctx.fillStyle = '#fff';
         ctx.font = `bold ${BALL_R}px monospace`;
         ctx.textAlign = 'center';
